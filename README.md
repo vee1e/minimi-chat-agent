@@ -13,6 +13,9 @@ npm run dev              # http://localhost:3000
 - `MOCK_PROVIDERS=1 npm run dev` — run with fake LLM + search (no keys).
 - `npm run chat` — CLI instead of the web UI.
 
+## Tested with
+Real end-to-end runs used OpenRouter free models (`nvidia/nemotron-3-ultra-550b-a55b:free` for answers, `cohere/north-mini-code:free` for routing) and Tavily. Free models are rate-limited and slow (a 5-search re-verification answer took roughly 60–100 s; a no-search answer ~6 s). Faster/paid models only change the env vars. Free models can be flaky at following format rules — if a model misbehaves, try another `:free` model that lists `tools` in `supported_parameters`.
+
 Read [`DESIGN.md`](DESIGN.md) for the architecture and [`NOTES.md`](NOTES.md) for study notes and interview Q&A.
 
 | Env var | Purpose |
