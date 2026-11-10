@@ -106,7 +106,8 @@ export class Agent {
     }
 
     // ---- 4. Strong model answers (streamed). The one LLM-callable tool is web_search. ------------------------------
-    const msgs: ChatMessage[] = [{ role: "system", content: answerSystem(nowStr) }];
+    const firstCallHasTool = !prefetched;
+    const msgs: ChatMessage[] = [{ role: "system", content: answerSystem(nowStr, firstCallHasTool) }];
     if (memory.text) msgs.push({ role: "system", content: memory.text });
     if (prefetched) msgs.push({ role: "system", content: `WEB SEARCH RESULTS (fetched just now, ${nowStr}). Cite with markdown links.\n${prefetched}` });
     if (conv?.summary && conv.summarized_upto > 0 && history.length >= cfg.limits.historyMessages)
