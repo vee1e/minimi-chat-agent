@@ -34,6 +34,7 @@ export async function route(
         query: String(q.query).trim().slice(0, 200),
         recency: (RECENCIES.has(q.recency) ? q.recency : "any") as Recency,
         news: q.news === true,
+        maxResults: 4, // fewer, better results per query = fewer prompt tokens = faster first token (and fewer search credits)
       }));
     const routeName = j.route === "direct" ? "direct" : "search";
     return {

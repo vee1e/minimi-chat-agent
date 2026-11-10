@@ -1,6 +1,6 @@
 import { RECENCY_DAYS, type SearchProvider, type SearchQuery, type SearchResult } from "./types.js";
 
-const clip = (s: string | undefined, n = 900) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+const clip = (s: string | undefined, n = 600) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 
 async function json(res: Response, who: string): Promise<any> {
   if (!res.ok) throw new Error(`${who} ${res.status}: ${(await res.text()).slice(0, 200)}`);
@@ -52,7 +52,7 @@ export class ExaProvider implements SearchProvider {
   async search(q: SearchQuery): Promise<SearchResult[]> {
     const body: Record<string, unknown> = {
       query: q.query, numResults: q.maxResults ?? 6, type: "auto",
-      contents: { text: { maxCharacters: 900 } },
+      contents: { text: { maxCharacters: 600 } },
     };
     if (q.news) body.category = "news";
     const days = RECENCY_DAYS[q.recency ?? "any"];
