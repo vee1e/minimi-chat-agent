@@ -122,7 +122,9 @@ export class Agent {
     let rounds = 0;
     try {
       for (;;) {
-        const allowTools = rounds < cfg.limits.maxToolRounds;
+        // When the router already prefetched results, answer straight from them (no extra tool round-trip). The tool stays
+        // available as the safety net when the router chose NOT to search, and for any follow-up round.
+        const allowTools = rounds < cfg.limits.maxToolRounds && !(rounds === 0 && prefetched);
         let pending: ToolCall[] = [];
         let roundText = "";
         for await (const ev of llm.strong.stream({ task: "answer", messages: msgs, tools: allowTools ? [WEB_SEARCH_TOOL] : undefined, signal })) {
@@ -133,7 +135,8 @@ export class Agent {
             emit({ type: "token", text: ev.delta });
           } else pending = ev.calls;
         }
-        if (!pending.length) break;
+        // If tools were withheld (round cap reached) but the model still asked for one, ignore it: answer with what we have.
+        if (!pending.length || !allowTools) break;
         rounds++;
         emit({ type: "status", stage: "tool", message: `Searching more (${pending.length})…` });
         msgs.push({ role: "assistant", content: roundText || null, tool_calls: pending });

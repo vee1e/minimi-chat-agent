@@ -70,7 +70,16 @@ describe("agent turn (mock providers)", () => {
     const { llm, seen } = spyLLM();
     const { app } = mk(llm);
     await app.agent.run({ message: "What's the best CRM for startups?" }, () => {});
-    for (const s of seen) expect(s.tools).toEqual(["web_search"]);
+    await app.agent.run({ message: "thanks!" }, () => {});
+    for (const s of seen) expect(s.tools ?? ["web_search"]).toEqual(["web_search"]);
+    expect(seen[1].tools).toEqual(["web_search"]); // router chose not to search => tool available as safety net
+  });
+
+  it("when searches were prefetched, the first answer call has no tool round-trip", async () => {
+    const { llm, seen } = spyLLM();
+    const { app } = mk(llm);
+    await app.agent.run({ message: "What's the best CRM for startups?" }, () => {});
+    expect(seen[0].tools).toBeUndefined();
   });
 
   it("small talk skips the router LLM and the search entirely", async () => {
