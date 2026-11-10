@@ -1,10 +1,10 @@
 import { createInterface } from "node:readline/promises";
 import { createApp } from "./app.js";
-import { missingKeys } from "./config.js";
+import { loadConfig, missingKeys } from "./config.js";
 
-const app = createApp();
-const missing = missingKeys(app.cfg);
+const missing = missingKeys(loadConfig());
 if (missing.length) { console.error(`Missing: ${missing.join(", ")} (see .env.example)`); process.exit(1); }
+const app = createApp();
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 let conv: string | undefined;
 for (;;) {
