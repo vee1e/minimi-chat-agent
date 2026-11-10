@@ -11,14 +11,20 @@ if (existsSync(".env")) {
 
 const e = (k: string, d = "") => (process.env[k] ?? "").trim() || d;
 
+function json(k: string): Record<string, unknown> {
+  const v = e(k);
+  if (!v) return {};
+  try { return JSON.parse(v); } catch { console.warn(`${k} is not valid JSON; ignoring`); return {}; }
+}
+
 export interface Config {
   port: number;
   tz: string;
   dbPath: string;
   mock: boolean;
   nowOverride?: string;
-  llm: { baseUrl: string; apiKey: string; model: string };
-  llmFast: { baseUrl: string; apiKey: string; model: string };
+  llm: { baseUrl: string; apiKey: string; model: string; extraBody: Record<string, unknown> };
+  llmFast: { baseUrl: string; apiKey: string; model: string; extraBody: Record<string, unknown> };
   search: {
     primary: string;
     fallback: string;
@@ -40,11 +46,12 @@ export function loadConfig(): Config {
     dbPath: e("DB_PATH", "./data/minimi.db"),
     mock: ["1", "true", "yes"].includes(e("MOCK_PROVIDERS").toLowerCase()),
     nowOverride: e("NOW_OVERRIDE") || undefined,
-    llm: { baseUrl, apiKey, model },
+    llm: { baseUrl, apiKey, model, extraBody: json("LLM_EXTRA_BODY") },
     llmFast: {
       baseUrl: e("LLM_FAST_BASE_URL", baseUrl).replace(/\/$/, ""),
       apiKey: e("LLM_FAST_API_KEY", apiKey),
       model: e("LLM_FAST_MODEL", model),
+      extraBody: json("LLM_FAST_EXTRA_BODY"),
     },
     search: {
       primary: e("SEARCH_PROVIDER", "tavily").toLowerCase(),
@@ -54,7 +61,7 @@ export function loadConfig(): Config {
       exaKey: e("EXA_API_KEY"),
       cacheTtlSec: Number(e("SEARCH_CACHE_TTL", "21600")),
     },
-    limits: { maxParallelSearches: 6, maxToolRounds: 2, historyMessages: 10 },
+    limits: { maxParallelSearches: 6, maxToolRounds: 1, historyMessages: 10 },
   };
 }
 

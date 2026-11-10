@@ -2,7 +2,7 @@ import type { ChatMessage, CompleteRequest, LLMClient, StreamEvent, StreamReques
 
 /** Minimal OpenAI-compatible Chat Completions client (works with OpenAI, OpenRouter, Groq, DeepSeek, vLLM...). */
 export class OpenAICompatClient implements LLMClient {
-  constructor(private baseUrl: string, private apiKey: string, readonly model: string) {}
+  constructor(private baseUrl: string, private apiKey: string, readonly model: string, private extraBody: Record<string, unknown> = {}) {}
 
   private headers() {
     return { "content-type": "application/json", authorization: `Bearer ${this.apiKey}` };
@@ -23,7 +23,7 @@ export class OpenAICompatClient implements LLMClient {
   }
 
   async complete(req: CompleteRequest): Promise<string> {
-    const body: Record<string, unknown> = { model: this.model, messages: this.wireMessages(req.messages), stream: false };
+    const body: Record<string, unknown> = { ...this.extraBody, model: this.model, messages: this.wireMessages(req.messages), stream: false };
     if (req.json) body.response_format = { type: "json_object" };
     let res = await fetch(`${this.baseUrl}/chat/completions`, { method: "POST", headers: this.headers(), body: JSON.stringify(body) });
     if (!res.ok && req.json && res.status === 400) {
@@ -37,7 +37,7 @@ export class OpenAICompatClient implements LLMClient {
   }
 
   async *stream(req: StreamRequest): AsyncGenerator<StreamEvent> {
-    const body: Record<string, unknown> = { model: this.model, messages: this.wireMessages(req.messages), stream: true };
+    const body: Record<string, unknown> = { ...this.extraBody, model: this.model, messages: this.wireMessages(req.messages), stream: true };
     if (req.tools?.length) { body.tools = this.wireTools(req.tools); body.tool_choice = "auto"; }
     const res = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST", headers: this.headers(), body: JSON.stringify(body), signal: req.signal,
