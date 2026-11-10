@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>minimi chat agent</title>
+<style>
+  :root { --bg:#0f1115; --panel:#161922; --line:#262b38; --fg:#e8eaf0; --mute:#8b93a7; --acc:#6ea8fe; --user:#1d2740; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); height:100vh; display:flex; }
+  aside { width:260px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
+  aside h1 { font-size:15px; margin:0; padding:16px; letter-spacing:.3px; }
+  aside h1 small { color:var(--mute); font-weight:400; display:block; font-size:12px; margin-top:2px; }
+  #new { margin:0 12px 12px; padding:8px; background:transparent; color:var(--fg); border:1px solid var(--line); border-radius:8px; cursor:pointer; }
+  #new:hover { border-color:var(--acc); }
+  #convs { overflow:auto; flex:1; padding:0 8px 12px; }
+  .conv { padding:8px 10px; border-radius:8px; cursor:pointer; font-size:13px; }
+  .conv:hover, .conv.active { background:#1e2330; }
+  .conv .d { color:var(--mute); font-size:11px; display:block; }
+  main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #log { flex:1; overflow:auto; padding:24px 0; }
+  .row { max-width:820px; margin:0 auto 18px; padding:0 20px; }
+  .msg { padding:12px 16px; border-radius:12px; }
+  .row.user .msg { background:var(--user); margin-left:80px; }
+  .row.bot .msg { background:var(--panel); border:1px solid var(--line); }
+  .msg p { margin:.4em 0; } .msg ul,.msg ol { margin:.4em 0; padding-left:1.4em; }
+  .msg a { color:var(--acc); } .msg code { background:#0b0d12; padding:1px 5px; border-radius:4px; font-size:13px; }
+  .msg table { border-collapse:collapse; margin:.6em 0; font-size:13.5px; } .msg th,.msg td { border:1px solid var(--line); padding:5px 9px; text-align:left; }
+  .msg h1,.msg h2,.msg h3 { font-size:15px; margin:.8em 0 .3em; }
+  .meta { color:var(--mute); font-size:12px; margin-top:6px; display:flex; flex-wrap:wrap; gap:6px 12px; }
+  .chip { border:1px solid var(--line); border-radius:999px; padding:1px 8px; }
+  .chip.mem { border-color:#3b6e4a; color:#8fd19e; } .chip.srch { border-color:#3a5a8c; color:#9ec1ff; }
+  .src { font-size:12px; color:var(--mute); margin-top:8px; } .src a { color:var(--acc); text-decoration:none; } .src div { margin:2px 0; }
+  .status { color:var(--mute); font-size:13px; font-style:italic; }
+  form { max-width:820px; width:100%; margin:0 auto; padding:0 20px 20px; display:flex; gap:8px; }
+  textarea { flex:1; resize:none; background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:12px; padding:12px 14px; font:inherit; height:50px; outline:none; }
+  textarea:focus { border-color:var(--acc); }
+  button.send { background:var(--acc); color:#06101f; border:0; border-radius:12px; padding:0 20px; font-weight:600; cursor:pointer; }
+  button.send:disabled { opacity:.5; cursor:default; }
+  #hints { max-width:820px; margin:0 auto; padding:0 20px 8px; display:flex; gap:6px; flex-wrap:wrap; }
+  #hints button { background:transparent; color:var(--mute); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
+  #hints button:hover { color:var(--fg); border-color:var(--acc); }
+  .empty { text-align:center; color:var(--mute); margin-top:12vh; } .empty h2 { color:var(--fg); font-weight:600; }
+</style>
+</head>
+<body>
+<aside>
+  <h1>minimi<small id="envline">web-search agent with dated memory</small></h1>
+  <button id="new">+ New chat</button>
+  <div id="convs"></div>
+</aside>
+<main>
+  <div id="log"></div>
+  <div id="hints"></div>
+  <form id="f"><textarea id="q" placeholder="Ask anything — I can search the web and I remember our past chats by date…" autofocus></textarea><button class="send" id="send">Send</button></form>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const log = $("#log"), q = $("#q"), sendBtn = $("#send");
+let convId = localStorage.getItem("conv") || null;
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function inline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+function md(src) {
+  const lines = src.split("\n"); let out = "", i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\s*\|.*\|\s*$/.test(l) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i + 1] || "")) {
+      const row = (r) => r.trim().replace(/^\||\|$/g, "").split("|").map((c) => inline(c.trim()));
+      const head = row(l); i += 2; let body = "";
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) body += "<tr>" + row(lines[i++]).map((c) => `<td>${c}</td>`).join("") + "</tr>";
+      out += `<table><tr>${head.map((c) => `<th>${c}</th>`).join("")}</tr>${body}</table>`; continue;
+    }
+    if (/^\s*([-*]|\d+\.)\s+/.test(l)) {
+      const ord = /^\s*\d+\./.test(l); let items = "";
+      while (i < lines.length && /^\s*([-*]|\d+\.)\s+/.test(lines[i])) items += `<li>${inline(lines[i++].replace(/^\s*([-*]|\d+\.)\s+/, ""))}</li>`;
+      out += ord ? `<ol>${items}</ol>` : `<ul>${items}</ul>`; continue;
+    }
+    const h = l.match(/^(#{1,3})\s+(.*)/);
+    if (h) { out += `<h3>${inline(h[2])}</h3>`; i++; continue; }
+    if (!l.trim()) { i++; continue; }
+    let p = l; i++;
+    while (i < lines.length && lines[i].trim() && !/^\s*([-*]|\d+\.|\||#)/.test(lines[i])) p += " " + lines[i++];
+    out += `<p>${inline(p)}</p>`;
+  }
+  return out;
+}
+
+function addRow(kind, html) {
+  const row = document.createElement("div"); row.className = "row " + kind;
+  row.innerHTML = `<div class="msg">${html}</div><div class="meta"></div><div class="src"></div>`;
+  log.appendChild(row); log.scrollTop = log.scrollHeight; return row;
+}
+function showSources(row, sources) {
+  const html = sources.map((s) => `<div>[${s.n}] <a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a>${s.published ? " · " + esc(String(s.published).slice(0, 10)) : ""}</div>`).join("");
+  row.querySelector(".src").innerHTML = `<details ${sources.length <= 4 ? "open" : ""}><summary>${sources.length} sources</summary>${html}</details>`;
+}
+async function loadConvs() {
+  const list = await (await fetch("/api/conversations")).json();
+  $("#convs").innerHTML = list.map((c) => `<div class="conv ${c.id === convId ? "active" : ""}" data-id="${c.id}">${esc(c.title)}<span class="d">${c.date} · ${c.messages} msgs</span></div>`).join("");
+  document.querySelectorAll(".conv").forEach((el) => (el.onclick = () => openConv(el.dataset.id)));
+}
+async function openConv(id) {
+  convId = id; localStorage.setItem("conv", id); log.innerHTML = "";
+  const msgs = await (await fetch("/api/conversations/" + id)).json();
+  for (const m of msgs) { const r = addRow(m.role === "user" ? "user" : "bot", m.role === "user" ? esc(m.content) : md(m.content)); if (m.sources?.length) showSources(r, m.sources); }
+  loadConvs();
+}
+function empty() { log.innerHTML = `<div class="empty"><h2>What do you want to know?</h2><div>I search the live web and remember our earlier chats by date.</div></div>`; }
+const HINTS = [
+  "On Monday we shortlisted 5 CRM tools for a 20-person sales team. Has any of them changed pricing or shipped something big since?",
+  "What did I ask you on 3 November? Is your answer still correct today?",
+  "Last Tuesday I asked you about Postgres hosting. Has any pricing changed since then?",
+];
+$("#hints").innerHTML = HINTS.map((h) => `<button>${esc(h.length > 62 ? h.slice(0, 60) + "…" : h)}</button>`).join("");
+document.querySelectorAll("#hints button").forEach((b, i) => (b.onclick = () => { q.value = HINTS[i]; $("#f").requestSubmit(); }));
+
+$("#new").onclick = () => { convId = null; localStorage.removeItem("conv"); empty(); loadConvs(); q.focus(); };
+q.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#f").requestSubmit(); } });
+
+$("#f").onsubmit = async (e) => {
+  e.preventDefault();
+  const message = q.value.trim(); if (!message || sendBtn.disabled) return;
+  if (log.querySelector(".empty")) log.innerHTML = "";
+  q.value = ""; sendBtn.disabled = true;
+  addRow("user", esc(message));
+  const row = addRow("bot", `<span class="status">thinking…</span>`);
+  const msgEl = row.querySelector(".msg"), meta = row.querySelector(".meta");
+  let text = "";
+  try {
+    const res = await fetch("/api/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ conversationId: convId, message }) });
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const block = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        const data = JSON.parse((block.split("\n").find((l) => l.startsWith("data:")) || "data:{}").slice(5));
+        if (data.type === "meta") { convId = data.conversationId; localStorage.setItem("conv", convId); }
+        else if (data.type === "status") { if (!text) msgEl.innerHTML = `<span class="status">${esc(data.message)}</span>`; }
+        else if (data.type === "token") { text += data.text; msgEl.innerHTML = md(text); }
+        else if (data.type === "sources") showSources(row, data.sources);
+        else if (data.type === "error") msgEl.innerHTML = `<span class="status">Error: ${esc(data.message)}</span>`;
+        else if (data.type === "done") {
+          const r = data.result, t = r.timings;
+          const chips = [];
+          if (r.memory.dates.length) chips.push(`<span class="chip mem">memory: ${r.memory.dates.join(", ")}</span>`);
+          if (r.memory.emptyDates.length) chips.push(`<span class="chip mem">no chats on ${r.memory.emptyDates.join(", ")}</span>`);
+          if (t.searches) chips.push(`<span class="chip srch">${t.searches} search${t.searches === 1 ? "" : "es"}${t.cacheHits ? ` (${t.cacheHits} cached)` : ""}</span>`);
+          chips.push(`<span>first token ${(t.firstTokenMs / 1000).toFixed(1)}s · total ${(t.totalMs / 1000).toFixed(1)}s</span>`);
+          meta.innerHTML = chips.join("");
+        }
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+  } catch (err) { msgEl.innerHTML = `<span class="status">Network error: ${esc(String(err))}</span>`; }
+  sendBtn.disabled = false; q.focus(); setTimeout(loadConvs, 1500);
+};
+
+(async () => {
+  try { const h = await (await fetch("/api/health")).json(); $("#envline").textContent = h.mock ? "MOCK providers (no keys)" : `${h.models.strong} · ${h.search} · ${h.tz}`; } catch {}
+  await loadConvs();
+  if (convId) { try { await openConv(convId); if (!log.children.length) empty(); } catch { empty(); } } else empty();
+})();
+</script>
+</body>
+</html>
